@@ -2,20 +2,22 @@ import gzip
 from datetime import datetime
 import os
 import csv
+import re
 
 import requests
+from bs4 import BeautifulSoup
 
 
 def main():
     movies = get_list_of_movies()
 
-    print(movies)
-    return
-
     for movie in movies:
-        cameras_used = get_cameras_used(movie)
+        # TODO if this movie is already in the database, skip it
+        cameras_used = get_cameras_used(movie['id'])
 
-        print('\n{}\n{}'.format(movie, cameras_used))
+        if cameras_used:
+            # TODO add a row into a PostgreSQL database with the movie name, id, and camera names used
+            print('\n{}\n{}'.format(movie['title'], cameras_used))
 
 
 def get_list_of_movies():
@@ -41,13 +43,32 @@ def get_list_of_movies():
     return movies
 
 
-def get_cameras_used(movie_name):
+def get_cameras_used(movie_id):
     """
-    given a movie name queries IMDb to get a list of the cameras used in the making of the movie.
-    @param movie_name: a string representing the name of the movie
+    given a movie id queries IMDb to get a list of the cameras used in the making of the movie.
+    @param movie_id: a string representing the IMDb id for a movie
     @return: a list of strings representing the cameras used in the making of the movie with the given name
     """
-    pass
+    movie_technical_url = 'https://www.imdb.com/title/{}/technical'.format(movie_id)
+    movie_technical_html = requests.get(movie_technical_url).text
+
+    # parse the list of cameras out of the HTML for the IMDb technical page
+    movie_technical_soup = BeautifulSoup(movie_technical_html, 'html.parser')
+    movie_technical_camera_label = movie_technical_soup.find('td', class_='label', string=re.compile('^\s*camera\s*$', re.IGNORECASE))
+
+    # if the Camera table row isn't in the HTML, IMDb doesn't have info on what camera was used
+    if movie_technical_camera_label is None:
+        return None
+
+    movie_technical_cameras_text = movie_technical_camera_label.next_sibling.next_sibling.get_text()
+    movie_cameras = []
+    for line in movie_technical_cameras_text.split('\n'):
+        # only grab info on the camera name, not the lenses used
+        movie_camera = line.split(',')[0].strip()
+        if movie_camera:
+            movie_cameras.append(movie_camera)
+
+    return movie_cameras
 
 
 if __name__ == '__main__':

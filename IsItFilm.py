@@ -1,3 +1,4 @@
+import logging
 import gzip
 from datetime import datetime
 import os
@@ -8,16 +9,26 @@ import requests
 from bs4 import BeautifulSoup
 
 
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.WARNING,
+    format='[%(levelname)s] %(asctime)s (%(filename)s:%(lineno)d): %(message)s'
+)
+logging.getLogger(__name__).setLevel(logging.DEBUG)
+
+
 def main():
+    LOGGER.info('getting list of movies')
     movies = get_list_of_movies()
 
+    LOGGER.info('getting cameras used in each movie')
     for movie in movies:
         # TODO if this movie is already in the database, skip it
         cameras_used = get_cameras_used(movie['id'])
 
         if cameras_used:
             # TODO add a row into a PostgreSQL database with the movie name, id, and camera names used
-            print('\n{}\n{}'.format(movie['title'], cameras_used))
+            LOGGER.debug('movie: {}, cameras: {}'.format(movie['title'], cameras_used))
 
 
 def get_list_of_movies():
@@ -29,7 +40,9 @@ def get_list_of_movies():
 
     # if the movies file doesn't exist, download and uncompress it
     if not os.path.exists(movies_file_path):
+        LOGGER.debug('downloading IMDb title basics tsv file')
         movies_file_compressed = requests.get('https://datasets.imdbws.com/title.basics.tsv.gz').content
+        LOGGER.debug('decompressing the title basics tsv file')
         movies_file = gzip.decompress(movies_file_compressed)
         with open(movies_file_path, 'wb') as f:
             f.write(movies_file)
@@ -38,6 +51,7 @@ def get_list_of_movies():
         movies_tsv = csv.reader(f, delimiter='\t')
 
         # filter out only movies, and get movie titles and IMDb id's
+        LOGGER.debug('filtering out non movies, and extracting relevant movie info')
         movies = [{'id': movie[0], 'english_title': movie[2], 'title': movie[3]} for movie in movies_tsv if movie[1] == 'movie']
 
     return movies
@@ -49,6 +63,7 @@ def get_cameras_used(movie_id):
     @param movie_id: a string representing the IMDb id for a movie
     @return: a list of strings representing the cameras used in the making of the movie with the given name
     """
+    LOGGER.debug('{}: getting IMDb HTML for technical info for movie'.format(movie_id))
     movie_technical_url = 'https://www.imdb.com/title/{}/technical'.format(movie_id)
     movie_technical_html = requests.get(movie_technical_url).text
 
@@ -58,8 +73,10 @@ def get_cameras_used(movie_id):
 
     # if the Camera table row isn't in the HTML, IMDb doesn't have info on what camera was used
     if movie_technical_camera_label is None:
+        LOGGER.debug('{}: no camera info found for this movie'.format(movie_id))
         return None
 
+    LOGGER.debug('{}: parsing camera names used for this movie'.format(movie_id))
     movie_technical_cameras_text = movie_technical_camera_label.next_sibling.next_sibling.get_text()
     movie_cameras = []
     for line in movie_technical_cameras_text.split('\n'):

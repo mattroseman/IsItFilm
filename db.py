@@ -18,6 +18,8 @@ class DatabaseConnection:
 
         Base.metadata.create_all(engine)
 
+        # TODO the session object in db is not thread safe
+        # there should be a new session for each thread (find out how to do this)
         self.session = sessionmaker(bind=engine)()
 
     def get_movie_by_id(self, movie_id):

@@ -24,6 +24,9 @@ services:
     volumes:
       - ./:/usr/src/app
     environment:
+      # configuration
+      NUM_THREADS: 5
+      # database connection
       DB_USER: user
       DB_PASSWORD: password
       DB_HOST: postgres

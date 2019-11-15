@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 import csv
 import re
+import threading
+from queue import Queue
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,25 +17,57 @@ from db import DatabaseConnection
 LOGGER = logging.getLogger('isitfilm')
 logging.basicConfig(
     level=logging.WARNING,
-    format='[%(levelname)s] %(asctime)s (%(filename)s:%(lineno)d): %(message)s'
+    format='[%(levelname)s] %(asctime)s [%(threadName)-10s](%(filename)s:%(lineno)d): %(message)s'
 )
 logging.getLogger('isitfilm').setLevel(logging.DEBUG)
 
+db = DatabaseConnection(
+    user=os.environ.get('DB_USER', 'user'),
+    password=os.environ.get('DB_PASSWORD', 'password'),
+    db=os.environ.get('DB_NAME', 'isitfilm'),
+    host=os.environ.get('DB_HOST', 'localhost'),
+    port=os.environ.get('DB_PORT', '5432')
+)
+
+movie_queue = Queue()
+total_movie_count = 0
+movies_processed = 0
+
 
 def main():
-    db = DatabaseConnection(
-        user=os.environ.get('DB_USER', 'user'),
-        password=os.environ.get('DB_PASSWORD', 'password'),
-        db=os.environ.get('DB_NAME', 'isitfilm'),
-        host=os.environ.get('DB_HOST', 'localhost'),
-        port=os.environ.get('DB_PORT', '5432')
-    )
+    global movie_queue, total_movie_count
 
     LOGGER.info('getting list of movies')
     movies = get_list_of_movies()
+    total_movie_count = len(movies)
+
+    # create a queue of movies
+    for movie in movies:
+        movie_queue.put(movie)
 
     LOGGER.info('getting cameras used in each movie')
-    for movie in movies:
+    # create threads to process movies off this queue
+    threads = []
+    for i in range(int(os.environ.get('NUM_THREADS', '1'))):
+        thread = threading.Thread(name='Thread-{}'.format(i), target=process_movie, daemon=True)
+        thread.start()
+        threads.append(thread)
+
+    # wait for all the threads to finish
+    for thread in threads:
+        thread.join()
+
+
+def process_movie():
+    """
+    process_movie keeps reading movies off the movie_queue and gets the cameras used in it, then adds it to the database
+    """
+    global movie_queue, total_movies_count, movies_processed
+
+    while not movie_queue.empty():
+        movies_processed += 1
+
+        movie = movie_queue.get()
         # if this movie is already in the database, skip it
         if db.get_movie_by_id(movie['id']):
             continue
@@ -43,7 +77,9 @@ def main():
         # add a row into a PostgreSQL database with the movie name, id, and camera names used
         db.add_movie_and_cameras(movie['id'], movie['title'], movie['english_title'], cameras_used)
 
-        LOGGER.debug('movie: {}, cameras: {}'.format(movie['title'], cameras_used))
+        LOGGER.debug('{}/{} movie: {}, cameras: {}'.format(
+            movies_processed, total_movie_count, movie['title'], cameras_used
+        ))
 
 
 def get_list_of_movies():

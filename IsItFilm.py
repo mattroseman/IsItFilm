@@ -8,27 +8,42 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from db import DatabaseConnection
 
-LOGGER = logging.getLogger(__name__)
+
+# set up logging
+LOGGER = logging.getLogger('isitfilm')
 logging.basicConfig(
     level=logging.WARNING,
     format='[%(levelname)s] %(asctime)s (%(filename)s:%(lineno)d): %(message)s'
 )
-logging.getLogger(__name__).setLevel(logging.DEBUG)
+logging.getLogger('isitfilm').setLevel(logging.DEBUG)
 
 
 def main():
+    db = DatabaseConnection(
+        user=os.environ.get('DB_USER', 'user'),
+        password=os.environ.get('DB_PASSWORD', 'password'),
+        db=os.environ.get('DB_NAME', 'isitfilm'),
+        host=os.environ.get('DB_HOST', 'localhost'),
+        port=os.environ.get('DB_PORT', '5432')
+    )
+
     LOGGER.info('getting list of movies')
     movies = get_list_of_movies()
 
     LOGGER.info('getting cameras used in each movie')
     for movie in movies:
-        # TODO if this movie is already in the database, skip it
+        # if this movie is already in the database, skip it
+        if db.get_movie_by_id(movie['id']):
+            continue
+
         cameras_used = get_cameras_used(movie['id'])
 
-        if cameras_used:
-            # TODO add a row into a PostgreSQL database with the movie name, id, and camera names used
-            LOGGER.debug('movie: {}, cameras: {}'.format(movie['title'], cameras_used))
+        # add a row into a PostgreSQL database with the movie name, id, and camera names used
+        db.add_movie_and_cameras(movie['id'], movie['title'], movie['english_title'], cameras_used)
+
+        LOGGER.debug('movie: {}, cameras: {}'.format(movie['title'], cameras_used))
 
 
 def get_list_of_movies():
@@ -40,6 +55,7 @@ def get_list_of_movies():
 
     # if the movies file doesn't exist, download and uncompress it
     if not os.path.exists(movies_file_path):
+        # TODO delete any previous tsv files, since they will be overwritten
         LOGGER.debug('downloading IMDb title basics tsv file')
         movies_file_compressed = requests.get('https://datasets.imdbws.com/title.basics.tsv.gz').content
         LOGGER.debug('decompressing the title basics tsv file')
@@ -74,7 +90,7 @@ def get_cameras_used(movie_id):
     # if the Camera table row isn't in the HTML, IMDb doesn't have info on what camera was used
     if movie_technical_camera_label is None:
         LOGGER.debug('{}: no camera info found for this movie'.format(movie_id))
-        return None
+        return []
 
     LOGGER.debug('{}: parsing camera names used for this movie'.format(movie_id))
     movie_technical_cameras_text = movie_technical_camera_label.next_sibling.next_sibling.get_text()

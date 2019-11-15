@@ -1,19 +1,31 @@
 version: "3.5"
 
 services:
-  postgresql:
+  postgres:
     image: postgres:12
     container_name: postgres
     environment:
+      POSTGRES_USER: user
       POSTGRES_PASSWORD: password
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
 
   isitfilm:
     build:
       context: .
       dockerfile: Dockerfile
     image: isitfilm:local
+    container_name: isitfilm
     command:
       - python
       - IsItFilm.py
     volumes:
       - ./:/usr/src/app
+    environment:
+      DB_USER: user
+      DB_PASSWORD: password
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: isitfilm

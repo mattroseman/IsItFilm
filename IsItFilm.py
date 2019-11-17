@@ -17,9 +17,9 @@ from db import DatabaseConnection
 LOGGER = logging.getLogger('isitfilm')
 logging.basicConfig(
     level=logging.WARNING,
-    format='[%(levelname)s] %(asctime)s [%(threadName)-10s](%(filename)s:%(lineno)d): %(message)s'
+    format='[%(levelname)-5s] %(asctime)s [%(threadName)-10s](%(filename)s:%(lineno)d): %(message)s'
 )
-logging.getLogger('isitfilm').setLevel(logging.DEBUG)
+logging.getLogger('isitfilm').setLevel(logging.INFO)
 
 db = DatabaseConnection(
     user=os.environ.get('DB_USER', 'user'),
@@ -77,7 +77,7 @@ def process_movie():
         # add a row into a PostgreSQL database with the movie name, id, and camera names used
         db.add_movie_and_cameras(movie['id'], movie['title'], movie['english_title'], cameras_used)
 
-        LOGGER.debug('{}/{} movie: {}, cameras: {}'.format(
+        LOGGER.info('{}/{} movie: {}, cameras: {}'.format(
             movies_processed, total_movie_count, movie['title'], cameras_used
         ))
 

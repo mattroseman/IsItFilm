@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
@@ -18,9 +19,20 @@ class DatabaseConnection:
 
         Base.metadata.create_all(engine)
 
-        # TODO the session object in db is not thread safe
-        # there should be a new session for each thread (find out how to do this)
-        self.session = sessionmaker(bind=engine)()
+        self.session_maker = sessionmaker(bind=engine)
+
+    @contextmanager
+    def session_scope(self):
+        session = self.session_maker()
+
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def get_movie_by_id(self, movie_id):
         """
@@ -28,7 +40,9 @@ class DatabaseConnection:
         @param movie_id: a string representing the id of the movie to query for
         @return: a Movie object if a movie with the given id was found, else None
         """
-        movie = self.session.query(Movie).filter_by(id=movie_id).first()
+        with self.session_scope() as session:
+            movie = session.query(Movie).filter_by(id=movie_id).first()
+
         if movie:
             return movie
 
@@ -43,16 +57,20 @@ class DatabaseConnection:
         @param camaras_used: a list of strings, that are names of cameras used in the given movie
         @return: the movie object that has been created and added to the database
         """
-        movie = Movie(id=movie_id, title=movie_title, english_title=movie_english_title)
+        with self.session_scope() as session:
+            movie = Movie(id=movie_id, title=movie_title, english_title=movie_english_title)
 
-        for camera_name in cameras_used:
-            camera = Camera(name=camera_name)
-            movie.cameras.append(camera)
+            for camera_name in cameras_used:
+                camera = session.query(Camera).filter_by(name=camera_name).first()
+                if not camera:
+                    camera = Camera(name=camera_name)
 
-            self.session.add(camera)
+                movie.cameras.append(camera)
 
-        self.session.add(movie)
+                session.add(camera)
 
-        self.session.commit()
+            session.add(movie)
+
+            session.commit()
 
         return movie

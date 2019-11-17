@@ -117,7 +117,14 @@ def get_cameras_used(movie_id):
     """
     LOGGER.debug('{}: getting IMDb HTML for technical info for movie'.format(movie_id))
     movie_technical_url = 'https://www.imdb.com/title/{}/technical'.format(movie_id)
-    movie_technical_html = requests.get(movie_technical_url).text
+    movie_technical_response = requests.get(movie_technical_url)
+    if movie_technical_response.status_code != 200:
+        LOGGER.exception('IMDb didn\'t respond with a 200, got a {} instead.\nResponse: {}'.format(
+            movie_technical_response.status_code,
+            movie_technical_response.text
+        ))
+        raise Exception('IMDb didn\'t respond with a 200')
+    movie_technical_html = movie_technical_response.text
 
     # parse the list of cameras out of the HTML for the IMDb technical page
     movie_technical_soup = BeautifulSoup(movie_technical_html, 'html.parser')

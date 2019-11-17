@@ -25,7 +25,7 @@ services:
       - ./:/usr/src/app
     environment:
       # configuration
-      NUM_THREADS: 5
+      NUM_THREADS: 10
       # database connection
       DB_USER: user
       DB_PASSWORD: password

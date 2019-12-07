@@ -70,6 +70,9 @@ def process_movie():
         movie = movie_queue.get()
         # if this movie is already in the database, skip it
         if db.get_movie_by_id(movie['id']):
+            LOGGER.info('ALREADY PROCESSED {}/{} movie: {}'.format(
+                movies_processed, total_movie_count, movie['title']
+            ))
             continue
 
         cameras_used = get_cameras_used(movie['id'])
@@ -104,7 +107,23 @@ def get_list_of_movies():
 
         # filter out only movies, and get movie titles and IMDb id's
         LOGGER.debug('filtering out non movies, and extracting relevant movie info')
-        movies = [{'id': movie[0], 'english_title': movie[2], 'title': movie[3]} for movie in movies_tsv if movie[1] == 'movie']
+
+        # in order to avoid duplicate movies, track ids encountered, and skip any duplicate ids
+        movie_ids = set()
+
+        movies = []
+
+        for movie in movies_tsv:
+            # skip any non movies
+            if movie[1] != 'movie':
+                continue
+
+            # skip any movies who's ids have already been added
+            if movie[0] in movie_ids:
+                continue
+            movie_ids.add(movie[0])
+
+            movies.append({'id': movie[0], 'english_title': movie[2], 'title': movie[3]})
 
     return movies
 

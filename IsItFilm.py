@@ -64,12 +64,14 @@ def process_movie():
     """
     global movie_queue, total_movies_count, movies_processed
 
+    thread_db_session = db.get_session()
+
     while not movie_queue.empty():
         movies_processed += 1
 
         movie = movie_queue.get()
         # if this movie is already in the database, skip it
-        if db.get_movie_by_id(movie['id']):
+        if db.get_movie_by_id(movie['id'], session=thread_db_session):
             LOGGER.info('ALREADY PROCESSED {}/{} movie: {}'.format(
                 movies_processed, total_movie_count, movie['title']
             ))
@@ -78,7 +80,13 @@ def process_movie():
         cameras_used = get_cameras_used(movie['id'])
 
         # add a row into a PostgreSQL database with the movie name, id, and camera names used
-        db.add_movie_and_cameras(movie['id'], movie['title'], movie['english_title'], cameras_used)
+        db.add_movie_and_cameras(
+            movie['id'],
+            movie['title'],
+            movie['english_title'],
+            cameras_used,
+            session=thread_db_session
+        )
 
         LOGGER.info('{}/{} movie: {}, cameras: {}'.format(
             movies_processed, total_movie_count, movie['title'], cameras_used
